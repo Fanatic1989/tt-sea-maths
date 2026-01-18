@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
 
@@ -10,10 +11,24 @@ from .checker import check_answer
 
 app = FastAPI(title="TT SEA Maths Tutor API")
 
+# ✅ CORS for Vercel frontend (MVP)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # must be False when allow_origins is "*"
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+
+
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {"status": "ok", "service": "tt-sea-maths-api"}
 
 
 @app.get("/health")
@@ -56,7 +71,14 @@ class AttemptLog(BaseModel):
 def log_attempt(a: AttemptLog) -> Dict[str, str]:
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO attempts (session_id, paper_id, question_id, entered_answer, is_correct, attempt_count, hint_level_used, used_example, used_tutor, used_show_step, used_reveal_solution, time_spent_sec) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            """
+            INSERT INTO attempts (
+                session_id, paper_id, question_id, entered_answer, is_correct,
+                attempt_count, hint_level_used, used_example, used_tutor,
+                used_show_step, used_reveal_solution, time_spent_sec
+            )
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
             (
                 a.session_id,
                 a.paper_id,
