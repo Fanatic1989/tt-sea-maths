@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import QuestionCard from "../components/QuestionCard";
 import { fetchSeaPaper, checkAnswer, logAttempt } from "../lib/api";
+
+function fmt(sec) {
+  const s = Math.max(0, Number(sec || 0));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(Math.floor(s % 60)).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
 
 export default function SeaPage() {
   const [loading, setLoading] = useState(false);
@@ -14,6 +21,10 @@ export default function SeaPage() {
   const [solvedByQid, setSolvedByQid] = useState({});
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
+
+  // ✅ TIMER
+  const [remainingSec, setRemainingSec] = useState(0);
+  const timerRef = useRef(null);
 
   const currentQuestion = useMemo(() => {
     return questions.length ? questions[index] : null;
@@ -29,6 +40,31 @@ export default function SeaPage() {
     return !!solvedByQid[currentQuestion.question_id];
   }, [solvedByQid, currentQuestion]);
 
+  const timeUp = remainingSec <= 0 && !!paper?.duration_sec;
+
+  function stopTimer() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function startTimer(seconds) {
+    stopTimer();
+    setRemainingSec(seconds);
+
+    timerRef.current = setInterval(() => {
+      setRemainingSec((s) => {
+        if (s <= 1) {
+          // hit 0 → stop
+          stopTimer();
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  }
+
   async function startPaper(mode = "full") {
     setError("");
     setFeedback("");
@@ -40,6 +76,10 @@ export default function SeaPage() {
       setIndex(0);
       setAttemptsByQid({});
       setSolvedByQid({});
+
+      // ✅ start/reset timer ONLY after paper loads
+      const dur = Number(p?.duration_sec ?? 4500);
+      startTimer(dur);
     } catch {
       setError("Failed to fetch");
     } finally {
@@ -49,11 +89,12 @@ export default function SeaPage() {
 
   useEffect(() => {
     startPaper("full");
+    return () => stopTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleCheck(userInputRaw, correctAnswer) {
-    if (!currentQuestion) return;
+    if (!currentQuestion || timeUp) return;
 
     const user_input = String(userInputRaw ?? "").trim();
     const qid = currentQuestion.question_id;
@@ -78,7 +119,7 @@ export default function SeaPage() {
         used_example: false,
         used_tutor: false,
         used_show_step: false,
-        used_reveal_solution: false,
+        used_reveal_solution: false, // keep false (feature removed)
         time_spent_sec: 0,
       });
 
@@ -86,7 +127,7 @@ export default function SeaPage() {
         setSolvedByQid((prev) => ({ ...prev, [qid]: true }));
         setFeedback("✅ Correct! Next unlocked.");
 
-        // ✅ auto-advance safely (no stale index)
+        // auto-advance
         setIndex((i) => (i < questions.length - 1 ? i + 1 : i));
       } else {
         setFeedback(result.feedback || "❌ Not correct yet. Try again.");
@@ -97,23 +138,26 @@ export default function SeaPage() {
   }
 
   function prev() {
+    if (timeUp) return;
     setFeedback("");
     setIndex((i) => (i > 0 ? i - 1 : 0));
   }
 
   function next() {
+    if (timeUp) return;
     setFeedback("");
     setIndex((i) => (i < questions.length - 1 ? i + 1 : i));
   }
 
   function jumpTo(i) {
+    if (timeUp) return;
     setFeedback("");
     setIndex(() => Math.max(0, Math.min(i, questions.length - 1)));
   }
 
   // helper popups (MVP)
   function showExample(q) {
-    if (!q) return;
+    if (!q || timeUp) return;
     if (q.example?.prompt) {
       const work = Array.isArray(q.example.work) ? q.example.work.join("\n") : "";
       alert(`${q.example.prompt}\n\n${work}\n\nAnswer: ${q.example.answer || ""}`);
@@ -123,18 +167,12 @@ export default function SeaPage() {
   }
 
   function showSteps(q) {
-    if (!q) return;
+    if (!q || timeUp) return;
     if (Array.isArray(q.steps) && q.steps.length) {
       alert(q.steps.join("\n"));
     } else {
       alert("No steps available for this question yet.");
     }
-  }
-
-  function revealSolution(q) {
-    if (!q) return;
-    const v = q.correct_answer?.value;
-    alert(v ? `Solution: ${v}` : "No solution available.");
   }
 
   return (
@@ -144,6 +182,15 @@ export default function SeaPage() {
           <h1 style={{ margin: 0 }}>TT SEA Maths Tutor</h1>
           <div className="muted">SEA Study Simulator · STD 1–5 Tutor</div>
           <div className="muted">{paper?.paper_id ? `Paper: ${paper.paper_id}` : ""}</div>
+        </div>
+
+        {/* ✅ Timer UI */}
+        <div style={{ textAlign: "right" }}>
+          <div className="muted" style={{ fontSize: 13 }}>Time left</div>
+          <div style={{ fontSize: 28, fontWeight: 800 }}>{fmt(remainingSec)}</div>
+          {timeUp ? (
+            <div style={{ marginTop: 6, fontWeight: 800 }}>⛔ Time’s up (paper locked)</div>
+          ) : null}
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
@@ -168,7 +215,7 @@ export default function SeaPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 18, marginTop: 16 }}>
         <div>
           <QuestionCard
-            key={currentQuestion?.question_id || index} // ✅ forces rerender when question changes
+            key={currentQuestion?.question_id || index}
             question={currentQuestion}
             index={index}
             total={questions.length}
@@ -176,16 +223,16 @@ export default function SeaPage() {
             onCheck={handleCheck}
             onPrev={prev}
             onNext={next}
-            nextLocked={!isSolved} // ✅ locked until correct
+            nextLocked={!isSolved}
             showExample={showExample}
             showSteps={showSteps}
-            revealSolution={revealSolution}
+            disabled={timeUp}          // ✅ lock inputs when time up
           />
         </div>
 
         <div className="card">
           <div className="cardTitle">Question Navigator</div>
-          <div className="muted">Tap a number to jump (MVP). We’ll lock jumping later.</div>
+          <div className="muted">Tap a number to jump.</div>
 
           <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
             {questions.map((q, i) => (
@@ -193,14 +240,19 @@ export default function SeaPage() {
                 key={q.question_id || i}
                 className={i === index ? "pillActive" : "pill"}
                 onClick={() => jumpTo(i)}
+                disabled={timeUp}
+                title={timeUp ? "Paper locked (time up)" : ""}
               >
                 {i + 1}
               </button>
             ))}
+          </div>
+
+          <div className="muted" style={{ marginTop: 12 }}>
+            SEA timing: 75 minutes (4500 seconds).
           </div>
         </div>
       </div>
     </div>
   );
 }
-

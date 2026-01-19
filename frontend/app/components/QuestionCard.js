@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export default function QuestionCard({
   question,
@@ -13,9 +13,14 @@ export default function QuestionCard({
   nextLocked = true,
   showExample,
   showSteps,
-  revealSolution,
+  disabled = false, // ✅ new
 }) {
   const [answer, setAnswer] = useState("");
+
+  // ✅ Reset answer whenever the question changes
+  useEffect(() => {
+    setAnswer("");
+  }, [question?.question_id]);
 
   const headerLeft = useMemo(() => {
     if (!question) return "";
@@ -28,7 +33,6 @@ export default function QuestionCard({
     return `Difficulty ${question.difficulty ?? ""}`.trim();
   }, [question]);
 
-  // ---- Guard: if question is missing, show a helpful message ----
   if (!question) {
     return (
       <div className="card">
@@ -40,7 +44,6 @@ export default function QuestionCard({
 
   return (
     <div className="card">
-      {/* Header row */}
       <div className="row" style={{ justifyContent: "space-between", gap: 12 }}>
         <div className="muted" style={{ fontWeight: 600 }}>
           {headerLeft}
@@ -48,53 +51,57 @@ export default function QuestionCard({
         <div className="muted">{headerRight}</div>
       </div>
 
-      {/* ✅ THIS IS THE FIX: render prompt */}
-      <div style={{ marginTop: 10, fontSize: 16, lineHeight: 1.35 }}>
+      <div style={{ marginTop: 10, fontSize: 16, lineHeight: 1.35, whiteSpace: "pre-wrap" }}>
         {question.prompt}
       </div>
 
-      {/* Answer input */}
       <div style={{ marginTop: 14 }}>
         <input
           className="input"
-          placeholder="Type your final answer"
+          placeholder={disabled ? "Paper locked (time up)" : "Type your final answer"}
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
+          disabled={disabled}
         />
       </div>
 
-      {/* Check button */}
       <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center" }}>
-        <button className="btn" onClick={() => onCheck?.(answer, question.correct_answer)}>
+        <button
+          className="btn"
+          onClick={() => onCheck?.(answer, question.correct_answer)}
+          disabled={disabled || !answer.trim()}
+        >
           Check
         </button>
         <div className="muted">Attempts: {attempts}</div>
       </div>
 
-      {/* Helper buttons */}
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button className="btnSecondary" onClick={() => showExample?.(question)}>
+        <button className="btnSecondary" onClick={() => showExample?.(question)} disabled={disabled}>
           i Example
         </button>
-        <button className="btnSecondary" onClick={() => showSteps?.(question)}>
+        <button className="btnSecondary" onClick={() => showSteps?.(question)} disabled={disabled}>
           Show Steps
         </button>
-        <button className="btnSecondary" onClick={() => revealSolution?.(question)}>
-          Reveal Solution (flags)
-        </button>
+        {/* ✅ Reveal Solution REMOVED */}
       </div>
 
-      {/* Footer nav */}
       <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-        <button className="btnSecondary" onClick={() => onPrev?.()} disabled={index <= 0}>
+        <button className="btnSecondary" onClick={() => onPrev?.()} disabled={disabled || index <= 0}>
           Previous
         </button>
 
         <button
           className="btnPrimary"
           onClick={() => onNext?.()}
-          disabled={nextLocked}
-          title={nextLocked ? "Next is locked until correct (learning mode)" : ""}
+          disabled={disabled || nextLocked}
+          title={
+            disabled
+              ? "Paper locked (time up)"
+              : nextLocked
+              ? "Next is locked until correct (learning mode)"
+              : ""
+          }
         >
           Next (locked by learning)
         </button>
