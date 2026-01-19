@@ -9,15 +9,14 @@ export default function SeaPage() {
   const [paper, setPaper] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [index, setIndex] = useState(0);
+
   const [attemptsByQid, setAttemptsByQid] = useState({});
+  const [solvedByQid, setSolvedByQid] = useState({}); // ✅ unlocks Next
+  const [feedback, setFeedback] = useState("");        // ✅ shows correct/incorrect message
   const [error, setError] = useState("");
 
-  // timer (simple countdown)
-  const [remainingSec, setRemainingSec] = useState(0);
-  const totalSec = paper?.duration_sec ?? 0;
-
   const currentQuestion = useMemo(() => {
-    return questions && questions.length > 0 ? questions[index] : null;
+    return questions.length ? questions[index] : null;
   }, [questions, index]);
 
   const attempts = useMemo(() => {
@@ -25,8 +24,14 @@ export default function SeaPage() {
     return attemptsByQid[currentQuestion.question_id] ?? 0;
   }, [attemptsByQid, currentQuestion]);
 
+  const isSolved = useMemo(() => {
+    if (!currentQuestion) return false;
+    return !!solvedByQid[currentQuestion.question_id];
+  }, [solvedByQid, currentQuestion]);
+
   async function startPaper(mode = "full") {
     setError("");
+    setFeedback("");
     setLoading(true);
     try {
       const p = await fetchSeaPaper(mode);
@@ -34,7 +39,7 @@ export default function SeaPage() {
       setQuestions(p.questions || []);
       setIndex(0);
       setAttemptsByQid({});
-      setRemainingSec(p.duration_sec || 0);
+      setSolvedByQid({});
     } catch (e) {
       setError("Failed to fetch");
     } finally {
@@ -42,44 +47,32 @@ export default function SeaPage() {
     }
   }
 
-  // auto start once
   useEffect(() => {
     startPaper("full");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // countdown timer
-  useEffect(() => {
-    if (!remainingSec) return;
-    const t = setInterval(() => {
-      setRemainingSec((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
-    return () => clearInterval(t);
-  }, [remainingSec]);
-
-  function fmt(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${String(s).padStart(2, "0")}`;
-  }
-
-  async function handleCheck(userInput, correctAnswer) {
+  async function handleCheck(userInputRaw, correctAnswer) {
     if (!currentQuestion) return;
 
+    const user_input = String(userInputRaw ?? "").trim(); // ✅ sanitize
     const qid = currentQuestion.question_id;
-    const nextAttempts = (attemptsByQid[qid] ?? 0) + 1;
 
+    setFeedback("");
+
+    // count attempts
+    const nextAttempts = (attemptsByQid[qid] ?? 0) + 1;
     setAttemptsByQid((prev) => ({ ...prev, [qid]: nextAttempts }));
 
     try {
-      const result = await checkAnswer(String(userInput ?? ""), correctAnswer);
+      const result = await checkAnswer(user_input, correctAnswer);
 
-      // log attempt (best-effort)
+      // log (best effort)
       logAttempt({
         session_id: paper?.paper_id || "session",
         paper_id: paper?.paper_id || null,
         question_id: qid,
-        entered_answer: String(userInput ?? ""),
+        entered_answer: user_input,
         is_correct: !!result.is_correct,
         attempt_count: nextAttempts,
         hint_level_used: 0,
@@ -91,39 +84,56 @@ export default function SeaPage() {
       });
 
       if (result.is_correct) {
-        // move to next automatically (optional)
-        if (index < questions.length - 1) setIndex(index + 1);
+        // ✅ mark solved + unlock next + auto-advance
+        setSolvedByQid((prev) => ({ ...prev, [qid]: true }));
+        setFeedback("✅ Correct! Next unlocked.");
+
+        // auto-advance (optional; comment out if you want manual next)
+        if (index < questions.length - 1) {
+          setIndex(index + 1);
+        }
       } else {
-        // show feedback in a simple alert for MVP
-        alert(result.feedback || "Not correct yet. Try again.");
+        setFeedback(result.feedback || "❌ Not correct yet. Try again.");
       }
     } catch {
-      alert("Failed to check answer");
+      setFeedback("❌ Failed to check answer (API error).");
     }
   }
 
   function prev() {
+    setFeedback("");
     if (index > 0) setIndex(index - 1);
   }
 
   function next() {
-    // locked-by-learning MVP: block if attempts === 0 or last answer wrong.
-    // For now we allow next if they have at least 1 attempt (you can tighten later)
+    setFeedback("");
     if (index < questions.length - 1) setIndex(index + 1);
   }
 
-  // helpers (simple MVP)
+  // helpers shown via alert (MVP)
   function showExample(q) {
     if (!q) return;
-    alert(q.example?.prompt ? `${q.example.prompt}\n\nAnswer: ${q.example.answer || ""}` : "No example yet.");
+    if (q.example?.prompt) {
+      const work = Array.isArray(q.example.work) ? q.example.work.join("\n") : "";
+      alert(`${q.example.prompt}\n\n${work}\n\nAnswer: ${q.example.answer || ""}`);
+    } else {
+      alert("No example available for this question yet.");
+    }
   }
+
   function showSteps(q) {
     if (!q) return;
-    alert(q.steps?.length ? q.steps.join("\n") : "No steps yet.");
+    if (Array.isArray(q.steps) && q.steps.length) {
+      alert(q.steps.join("\n"));
+    } else {
+      alert("No steps available for this question yet.");
+    }
   }
+
   function revealSolution(q) {
     if (!q) return;
-    alert(q.correct_answer?.value ? `Solution: ${q.correct_answer.value}` : "No solution.");
+    const v = q.correct_answer?.value;
+    alert(v ? `Solution: ${v}` : "No solution available.");
   }
 
   return (
@@ -132,19 +142,14 @@ export default function SeaPage() {
         <div>
           <h1 style={{ margin: 0 }}>TT SEA Maths Tutor</h1>
           <div className="muted">SEA Study Simulator · STD 1–5 Tutor</div>
+          <div className="muted">{paper?.paper_id ? `Paper: ${paper.paper_id} · Mode: full` : ""}</div>
         </div>
-        <div className="muted" style={{ fontWeight: 700 }}>
-          ⏳ {totalSec ? fmt(remainingSec) : "--:--"}
-        </div>
-      </div>
 
-      <div style={{ marginTop: 16 }}>
-        <button className="btnSecondary" onClick={() => startPaper("full")} disabled={loading}>
-          Start Full SEA Paper (40 questions)
-        </button>
-        <span style={{ marginLeft: 10 }} className="muted">
-          {paper?.paper_id ? `Paper: ${paper.paper_id}` : ""}
-        </span>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btnSecondary" onClick={() => startPaper("full")} disabled={loading}>
+            Restart Paper
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -153,10 +158,11 @@ export default function SeaPage() {
         </div>
       ) : null}
 
-      {/* ✅ DEBUG LINE: proves prompt exists */}
-      <div style={{ marginTop: 12 }} className="muted">
-        Debug prompt: {currentQuestion?.prompt ? currentQuestion.prompt : "(missing)"}
-      </div>
+      {feedback ? (
+        <div style={{ marginTop: 12 }} className="card">
+          {feedback}
+        </div>
+      ) : null}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 18, marginTop: 16 }}>
         <div>
@@ -168,7 +174,7 @@ export default function SeaPage() {
             onCheck={handleCheck}
             onPrev={prev}
             onNext={next}
-            nextLocked={false}
+            nextLocked={!isSolved} // ✅ locked until solved
             showExample={showExample}
             showSteps={showSteps}
             revealSolution={revealSolution}
@@ -177,14 +183,17 @@ export default function SeaPage() {
 
         <div className="card">
           <div className="cardTitle">Question Navigator</div>
-          <div className="muted">Tap a number to jump (MVP)</div>
+          <div className="muted">Tap a number to jump (MVP). We’ll lock jumping later.</div>
 
           <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
             {questions.map((q, i) => (
               <button
                 key={q.question_id || i}
                 className={i === index ? "pillActive" : "pill"}
-                onClick={() => setIndex(i)}
+                onClick={() => {
+                  setFeedback("");
+                  setIndex(i);
+                }}
               >
                 {i + 1}
               </button>
