@@ -11,8 +11,8 @@ export default function SeaPage() {
   const [index, setIndex] = useState(0);
 
   const [attemptsByQid, setAttemptsByQid] = useState({});
-  const [solvedByQid, setSolvedByQid] = useState({}); // ✅ unlocks Next
-  const [feedback, setFeedback] = useState("");        // ✅ shows correct/incorrect message
+  const [solvedByQid, setSolvedByQid] = useState({});
+  const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
 
   const currentQuestion = useMemo(() => {
@@ -40,7 +40,7 @@ export default function SeaPage() {
       setIndex(0);
       setAttemptsByQid({});
       setSolvedByQid({});
-    } catch (e) {
+    } catch {
       setError("Failed to fetch");
     } finally {
       setLoading(false);
@@ -55,19 +55,18 @@ export default function SeaPage() {
   async function handleCheck(userInputRaw, correctAnswer) {
     if (!currentQuestion) return;
 
-    const user_input = String(userInputRaw ?? "").trim(); // ✅ sanitize
+    const user_input = String(userInputRaw ?? "").trim();
     const qid = currentQuestion.question_id;
 
     setFeedback("");
 
-    // count attempts
     const nextAttempts = (attemptsByQid[qid] ?? 0) + 1;
     setAttemptsByQid((prev) => ({ ...prev, [qid]: nextAttempts }));
 
     try {
       const result = await checkAnswer(user_input, correctAnswer);
 
-      // log (best effort)
+      // best-effort logging
       logAttempt({
         session_id: paper?.paper_id || "session",
         paper_id: paper?.paper_id || null,
@@ -84,14 +83,11 @@ export default function SeaPage() {
       });
 
       if (result.is_correct) {
-        // ✅ mark solved + unlock next + auto-advance
         setSolvedByQid((prev) => ({ ...prev, [qid]: true }));
         setFeedback("✅ Correct! Next unlocked.");
 
-        // auto-advance (optional; comment out if you want manual next)
-        if (index < questions.length - 1) {
-          setIndex(index + 1);
-        }
+        // ✅ auto-advance safely (no stale index)
+        setIndex((i) => (i < questions.length - 1 ? i + 1 : i));
       } else {
         setFeedback(result.feedback || "❌ Not correct yet. Try again.");
       }
@@ -102,15 +98,20 @@ export default function SeaPage() {
 
   function prev() {
     setFeedback("");
-    if (index > 0) setIndex(index - 1);
+    setIndex((i) => (i > 0 ? i - 1 : 0));
   }
 
   function next() {
     setFeedback("");
-    if (index < questions.length - 1) setIndex(index + 1);
+    setIndex((i) => (i < questions.length - 1 ? i + 1 : i));
   }
 
-  // helpers shown via alert (MVP)
+  function jumpTo(i) {
+    setFeedback("");
+    setIndex(() => Math.max(0, Math.min(i, questions.length - 1)));
+  }
+
+  // helper popups (MVP)
   function showExample(q) {
     if (!q) return;
     if (q.example?.prompt) {
@@ -142,7 +143,7 @@ export default function SeaPage() {
         <div>
           <h1 style={{ margin: 0 }}>TT SEA Maths Tutor</h1>
           <div className="muted">SEA Study Simulator · STD 1–5 Tutor</div>
-          <div className="muted">{paper?.paper_id ? `Paper: ${paper.paper_id} · Mode: full` : ""}</div>
+          <div className="muted">{paper?.paper_id ? `Paper: ${paper.paper_id}` : ""}</div>
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
@@ -167,6 +168,7 @@ export default function SeaPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1.35fr 0.65fr", gap: 18, marginTop: 16 }}>
         <div>
           <QuestionCard
+            key={currentQuestion?.question_id || index} // ✅ forces rerender when question changes
             question={currentQuestion}
             index={index}
             total={questions.length}
@@ -174,7 +176,7 @@ export default function SeaPage() {
             onCheck={handleCheck}
             onPrev={prev}
             onNext={next}
-            nextLocked={!isSolved} // ✅ locked until solved
+            nextLocked={!isSolved} // ✅ locked until correct
             showExample={showExample}
             showSteps={showSteps}
             revealSolution={revealSolution}
@@ -190,10 +192,7 @@ export default function SeaPage() {
               <button
                 key={q.question_id || i}
                 className={i === index ? "pillActive" : "pill"}
-                onClick={() => {
-                  setFeedback("");
-                  setIndex(i);
-                }}
+                onClick={() => jumpTo(i)}
               >
                 {i + 1}
               </button>
@@ -204,3 +203,4 @@ export default function SeaPage() {
     </div>
   );
 }
+
