@@ -1,1 +1,81 @@
-{"country":"Trinidad and Tobago","product":"Primary Maths Tutor + SEA Study Simulator","sea_simulator":{"duration_sec":4500,"sections":[{"name":"I","count":20,"marks_each":1},{"name":"II","count":16,"marks_each":2},{"name":"III","count":4,"marks_each":5,"multi_part_probability":0.65,"max_parts":2}]},"grades":[]}
+{
+  "country": "Trinidad and Tobago",
+  "exam": "SEA Mathematics",
+  "duration_sec": 4500,
+  "paper": {
+    "sections": [
+      { "name": "I", "count": 20, "marks_each": 1 },
+      { "name": "II", "count": 16, "marks_each": [2, 3] },
+      { "name": "III", "count": 4, "marks_each": 4 }
+    ],
+    "strand_items": {
+      "Number": 19,
+      "Measurement": 9,
+      "Geometry": 6,
+      "Statistics": 6
+    },
+    "thinking": ["Knowing", "Applying", "Reasoning"]
+  },
+  "strands": {
+    "Number": {
+      "domains": [
+        "Number concepts/place value/rounding",
+        "Factors/multiples/primes",
+        "Fractions/decimals/percents",
+        "Operations (+-×÷) including multi-step problems",
+        "Ratio/rate (where applicable)",
+        "Patterns/number sequences"
+      ]
+    },
+    "Measurement": {
+      "domains": [
+        "Length/perimeter",
+        "Area",
+        "Mass/weight",
+        "Capacity/volume",
+        "Time (incl elapsed time)",
+        "Money"
+      ]
+    },
+    "Geometry": {
+      "domains": [
+        "Solids and properties",
+        "Plane shapes (triangles/quadrilaterals etc.)",
+        "Angles",
+        "Symmetry/transformations",
+        "Coordinate basics (if included in objectives)"
+      ]
+    },
+    "Statistics": {
+      "domains": [
+        "Data collection/organisation",
+        "Tables/charts/graphs",
+        "Interpretation",
+        "Mean/median/mode (where included)",
+        "Probability basics (if included)"
+      ]
+    }
+  },
+
+  "skill_bank": {
+    "Number": [
+      "std4_add_sub_4digit",
+      "std4_mult_2digit_by_1digit",
+      "std4_div_exact",
+      "std5_add_sub_unlike_denoms",
+      "std5_fraction_of_quantity",
+      "std5_percent_of_quantity"
+    ],
+    "Measurement": [
+      "std4_perimeter_rectangle",
+      "std4_area_rectangle"
+    ],
+    "Geometry": [
+      "std5_triangle_angle"
+    ],
+    "Statistics": [
+      "stat_read_table_basic",
+      "stat_read_bar_chart_basic"
+    ]
+  }
+}
